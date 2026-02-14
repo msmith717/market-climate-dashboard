@@ -64,12 +64,12 @@ with st.expander("Status"):
 # Optional: crude rotation placeholder (kept OFF for MVP stability)
 
 # ---------------------------
-# Chart #2: Real yield curve (TIPS) — latest weekly curve + ghost curves
+# Chart #2: Real yield curve (TIPS) — scrub-to-animate (time slider)
 # ---------------------------
 import plotly.graph_objects as go
 
 st.divider()
-st.subheader("Real Yield Curve (TIPS) — Latest Week + Ghost Curves")
+st.subheader("Real Yield Curve (TIPS) — Time Scrub (Weekly)")
 
 TIPS_SERIES = {
     "5Y": "DFII5",
@@ -93,7 +93,7 @@ def fetch_many(series_map: dict) -> pd.DataFrame:
 
 tips = fetch_many(TIPS_SERIES)
 
-# 3-year window + weekly sampling (consistent with your philosophy)
+# 3-year window + weekly sampling
 end2 = tips["date"].max()
 start2 = end2 - pd.DateOffset(years=3)
 tips = tips[tips["date"] >= start2].copy()
@@ -107,75 +107,50 @@ tips_w = (
 )
 
 maturities = ["5Y", "7Y", "10Y", "20Y", "30Y"]
-maturity_num = [5.0, 7.0, 10.0, 20.0, 30.0]
+x_years = [5.0, 7.0, 10.0, 20.0, 30.0]
 
 def row_to_curve(row: pd.Series) -> pd.DataFrame:
-    c = pd.DataFrame({"x": maturity_num, "y": [row[m] for m in maturities]})
+    c = pd.DataFrame({"x": x_years, "y": [row[m] for m in maturities]})
     return c.dropna()
 
-# Build ghost dates: one curve per month (use the last weekly point in each month)
-tips_w["month"] = tips_w["date"].dt.to_period("M").astype(str)
-ghost_rows = tips_w.groupby("month", as_index=False).tail(1)
+# Slider over available weekly dates
+dates = tips_w["date"].dt.to_pydatetime().tolist()
+default_idx = len(dates) - 1
 
-# Keep ghost curves to a manageable count (last 12 months by default)
-GHOST_MONTHS = 12
-ghost_rows = ghost_rows.tail(GHOST_MONTHS)
-
-latest_row = tips_w.iloc[-1]
-week_ending = tips_w["date"].max()
-
-fig2 = go.Figure()
-
-# --- Build reference curves: 12m ago, 6m ago, current ---
-
-def get_curve_nearest(date_target):
-    # Find the closest available weekly date
-    idx = (tips_w["date"] - date_target).abs().idxmin()
-    return tips_w.loc[idx]
-
-current_date = tips_w["date"].max()
-six_months_ago = current_date - pd.DateOffset(months=6)
-twelve_months_ago = current_date - pd.DateOffset(months=12)
-
-row_current = get_curve_nearest(current_date)
-row_6m = get_curve_nearest(six_months_ago)
-row_12m = get_curve_nearest(twelve_months_ago)
-
-fig2 = go.Figure()
-
-# 12 months ago (light gray)
-c_12m = row_to_curve(row_12m)
-fig2.add_trace(go.Scatter(
-    x=c_12m["x"], y=c_12m["y"],
-    mode="lines",
-    name="12M Ago",
-    line=dict(width=3, color="lightgray"),
-))
-
-# 6 months ago (medium gray)
-c_6m = row_to_curve(row_6m)
-fig2.add_trace(go.Scatter(
-    x=c_6m["x"], y=c_6m["y"],
-    mode="lines",
-    name="6M Ago",
-    line=dict(width=3, color="gray"),
-))
-
-# Current (black)
-c_current = row_to_curve(row_current)
-fig2.add_trace(go.Scatter(
-    x=c_current["x"], y=c_current["y"],
-    mode="lines+markers",
-    name="Current",
-    line=dict(width=3, color="black"),
-))
-
-fig2.update_layout(
-    xaxis_title="Maturity (Years)",
-    yaxis_title="Real Yield (%)",
-    margin=dict(l=10, r=10, t=10, b=10),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+selected_date = st.slider(
+    "Week ending",
+    min_value=dates[0],
+    max_value=dates[-1],
+    value=dates[default_idx],
+    format="YYYY-MM-DD",
 )
+
+# Pick nearest row (slider date should match exactly, but this is robust)
+idx = (tips_w["date"] - pd.to_datetime(selected_date)).abs().idxmin()
+row_sel = tips_w.loc[idx]
+row_now = tips_w.iloc[-1]
+
+c_sel = row_to_curve(row_sel)
+c_now = row_to_curve(row_now)
+
+fig2 = go.Figure()
+
+# Optional anchor: show "Now" faintly so the selected curve has context
+fig2.add_trace(go.Scatter(
+    x=c_now["x"], y=c_now["y"],
+    mode="lines",
+    name="Now (anchor)",
+    line=dict(width=3, color="rgba(0,0,0,0.20)"),
+    hoverinfo="skip",
+))
+
+# Selected curve (dark)
+fig2.add_trace(go.Scatter(
+    x=c_sel["x"], y=c_sel["y"],
+    mode="lines+markers",
+    name="Selected week",
+    line=dict(width=3, color="rgba(0,0,0,1.0)"),
+))
 
 fig2.update_layout(
     xaxis_title="Maturity (Years)",
@@ -185,11 +160,11 @@ fig2.update_layout(
 )
 st.plotly_chart(fig2, use_container_width=True)
 
-with st.expander("TIPS ghost status"):
+with st.expander("TIPS scrub status"):
     st.write({
-        "week_ending": str(pd.to_datetime(week_ending).date()),
-        "ghost_months_plotted": int(len(ghost_rows)),
-        "ghost_months_setting": GHOST_MONTHS,
+        "selected_week_ending": str(pd.to_datetime(row_sel["date"]).date()),
+        "now_week_ending": str(pd.to_datetime(row_now["date"]).date()),
+        "points_available": int(len(tips_w)),
         "series": TIPS_SERIES,
     })
 
