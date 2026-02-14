@@ -126,24 +126,56 @@ week_ending = tips_w["date"].max()
 
 fig2 = go.Figure()
 
-# Ghost curves with grayscale + time-based opacity gradient
-total = len(ghost_rows)
+# --- Build reference curves: 12m ago, 6m ago, current ---
 
-for i, (_, r) in enumerate(ghost_rows.iterrows()):
-    c = row_to_curve(r)
-    if c.empty:
-        continue
+def get_curve_nearest(date_target):
+    # Find the closest available weekly date
+    idx = (tips_w["date"] - date_target).abs().idxmin()
+    return tips_w.loc[idx]
 
-    opacity = 0.10 + 0.70 * (i / max(total - 1, 1))
+current_date = tips_w["date"].max()
+six_months_ago = current_date - pd.DateOffset(months=6)
+twelve_months_ago = current_date - pd.DateOffset(months=12)
 
-    fig2.add_trace(go.Scatter(
-        x=c["x"], y=c["y"],
-        mode="lines",
-        line=dict(width=3, color="black"),
-        opacity=opacity,
-        showlegend=False,
-        hoverinfo="skip",
-    ))
+row_current = get_curve_nearest(current_date)
+row_6m = get_curve_nearest(six_months_ago)
+row_12m = get_curve_nearest(twelve_months_ago)
+
+fig2 = go.Figure()
+
+# 12 months ago (light gray)
+c_12m = row_to_curve(row_12m)
+fig2.add_trace(go.Scatter(
+    x=c_12m["x"], y=c_12m["y"],
+    mode="lines",
+    name="12M Ago",
+    line=dict(width=3, color="lightgray"),
+))
+
+# 6 months ago (medium gray)
+c_6m = row_to_curve(row_6m)
+fig2.add_trace(go.Scatter(
+    x=c_6m["x"], y=c_6m["y"],
+    mode="lines",
+    name="6M Ago",
+    line=dict(width=3, color="gray"),
+))
+
+# Current (black)
+c_current = row_to_curve(row_current)
+fig2.add_trace(go.Scatter(
+    x=c_current["x"], y=c_current["y"],
+    mode="lines+markers",
+    name="Current",
+    line=dict(width=3, color="black"),
+))
+
+fig2.update_layout(
+    xaxis_title="Maturity (Years)",
+    yaxis_title="Real Yield (%)",
+    margin=dict(l=10, r=10, t=10, b=10),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+)
 
 # Current curve (darkest black)
 c_latest = row_to_curve(latest_row)
