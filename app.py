@@ -194,12 +194,12 @@ with st.expander("TIPS ghost status"):
     })
 
 # ---------------------------
-# Chart #3: Nominal Treasury vs Investment-Grade (IG) curve proxy — latest weekly
+# Chart #3: Nominal Treasury vs IG Corporate curve (proxy) — 12M / 6M / Now
 # ---------------------------
 import plotly.graph_objects as go
 
 st.divider()
-st.subheader("Nominal Treasury vs IG Corporate Curve (Proxy) — Latest Week")
+st.subheader("Nominal Treasury vs IG Corporate Curve (Proxy) — 12M / 6M / Now")
 
 TREASURY_SERIES = {
     "1M": ("DGS1MO", 1/12),
@@ -225,24 +225,21 @@ IG_SERIES = {
 }
 
 @st.cache_data(ttl=24 * 60 * 60)
-def fetch_curve_series(series_def: dict) -> pd.DataFrame:
+def fetch_curve_wide(series_def: dict) -> pd.DataFrame:
     frames = []
     for label, (sid, x_years) in series_def.items():
         d = fetch_fred_series(sid).rename(columns={"value": label})
-        d["x_years"] = x_years
-        frames.append(d[["date", label, "x_years"]])
-    # Merge wide on date; keep x_years separately
-    wide = frames[0][["date", list(series_def.keys())[0]]]
+        frames.append(d[["date", label]])
+    wide = frames[0]
     for f in frames[1:]:
-        col = [c for c in f.columns if c not in ("date", "x_years")][0]
-        wide = wide.merge(f[["date", col]], on="date", how="outer")
+        wide = wide.merge(f, on="date", how="outer")
     wide = wide.sort_values("date")
     return wide
 
-def latest_weekly_row(wide: pd.DataFrame, years: int = 3) -> pd.Series:
-    end = wide["date"].max()
+def to_weekly_window(df: pd.DataFrame, years: int = 3) -> pd.DataFrame:
+    end = df["date"].max()
     start = end - pd.DateOffset(years=years)
-    w = wide[wide["date"] >= start].copy()
+    w = df[df["date"] >= start].copy()
     w = (
         w.set_index("date")
          .resample("W-FRI")
@@ -250,40 +247,67 @@ def latest_weekly_row(wide: pd.DataFrame, years: int = 3) -> pd.Series:
          .dropna()
          .reset_index()
     )
-    return w.iloc[-1], w["date"].max()
+    return w
 
-# Fetch and build latest Treasury curve
-treas_wide = fetch_curve_series({k: (v[0], v[1]) for k, v in TREASURY_SERIES.items()})
-treas_last, treas_week = latest_weekly_row(treas_wide, years=3)
+def nearest_row(df_weekly: pd.DataFrame, target_date: pd.Timestamp) -> pd.Series:
+    idx = (df_weekly["date"] - target_date).abs().idxmin()
+    return df_weekly.loc[idx]
 
-treas_curve = pd.DataFrame({
-    "x_years": [v[1] for v in TREASURY_SERIES.values()],
-    "label": list(TREASURY_SERIES.keys()),
-    "y": [treas_last[k] for k in TREASURY_SERIES.keys()],
-}).dropna().sort_values("x_years")
+def row_to_curve(row: pd.Series, series_def: dict) -> pd.DataFrame:
+    labels = list(series_def.keys())
+    x = [series_def[k][1] for k in labels]
+    y = [row.get(k, None) for k in labels]
+    c = pd.DataFrame({"x_years": x, "y": y}).dropna().sort_values("x_years")
+    return c
 
-# Fetch and build latest IG curve proxy
-ig_wide = fetch_curve_series({k: (v[0], v[1]) for k, v in IG_SERIES.items()})
-ig_last, ig_week = latest_weekly_row(ig_wide, years=3)
+# Build weekly datasets
+treas_wide = fetch_curve_wide(TREASURY_SERIES)
+ig_wide = fetch_curve_wide(IG_SERIES)
 
-ig_curve = pd.DataFrame({
-    "x_years": [v[1] for v in IG_SERIES.values()],
-    "label": list(IG_SERIES.keys()),
-    "y": [ig_last[k] for k in IG_SERIES.keys()],
-}).dropna().sort_values("x_years")
+treas_w = to_weekly_window(treas_wide, years=3)
+ig_w = to_weekly_window(ig_wide, years=3)
 
-# Use the later of the two weeks (they should typically match)
-week_ending = max(treas_week, ig_week)
+# Use latest common week-ending so lines align in time
+current_date = min(treas_w["date"].max(), ig_w["date"].max())
+date_6m = current_date - pd.DateOffset(months=6)
+date_12m = current_date - pd.DateOffset(months=12)
+
+# Pick nearest available rows for each dataset
+treas_now = nearest_row(treas_w, current_date)
+treas_6m = nearest_row(treas_w, date_6m)
+treas_12m = nearest_row(treas_w, date_12m)
+
+ig_now = nearest_row(ig_w, current_date)
+ig_6m = nearest_row(ig_w, date_6m)
+ig_12m = nearest_row(ig_w, date_12m)
+
+# Curves
+c_t_now = row_to_curve(treas_now, TREASURY_SERIES)
+c_t_6m  = row_to_curve(treas_6m, TREASURY_SERIES)
+c_t_12m = row_to_curve(treas_12m, TREASURY_SERIES)
+
+c_ig_now = row_to_curve(ig_now, IG_SERIES)
+c_ig_6m  = row_to_curve(ig_6m, IG_SERIES)
+c_ig_12m = row_to_curve(ig_12m, IG_SERIES)
 
 fig3 = go.Figure()
-fig3.add_trace(go.Scatter(
-    x=treas_curve["x_years"], y=treas_curve["y"],
-    mode="lines+markers", name="Treasury (Nominal)"
-))
-fig3.add_trace(go.Scatter(
-    x=ig_curve["x_years"], y=ig_curve["y"],
-    mode="lines+markers", name="IG Corporate (Proxy)"
-))
+
+# Treasury (solid)
+fig3.add_trace(go.Scatter(x=c_t_12m["x_years"], y=c_t_12m["y"], mode="lines",
+                          name="Treasury 12M", line=dict(width=3, color="lightgray")))
+fig3.add_trace(go.Scatter(x=c_t_6m["x_years"], y=c_t_6m["y"], mode="lines",
+                          name="Treasury 6M", line=dict(width=3, color="gray")))
+fig3.add_trace(go.Scatter(x=c_t_now["x_years"], y=c_t_now["y"], mode="lines",
+                          name="Treasury Now", line=dict(width=3, color="black")))
+
+# IG (dashed)
+fig3.add_trace(go.Scatter(x=c_ig_12m["x_years"], y=c_ig_12m["y"], mode="lines",
+                          name="IG 12M", line=dict(width=3, color="lightgray", dash="dash")))
+fig3.add_trace(go.Scatter(x=c_ig_6m["x_years"], y=c_ig_6m["y"], mode="lines",
+                          name="IG 6M", line=dict(width=3, color="gray", dash="dash")))
+fig3.add_trace(go.Scatter(x=c_ig_now["x_years"], y=c_ig_now["y"], mode="lines",
+                          name="IG Now", line=dict(width=3, color="black", dash="dash")))
+
 fig3.update_layout(
     xaxis_title="Maturity (Years)",
     yaxis_title="Yield (%)",
@@ -294,7 +318,10 @@ st.plotly_chart(fig3, use_container_width=True)
 
 with st.expander("Nominal vs IG status"):
     st.write({
-        "week_ending": str(pd.to_datetime(week_ending).date()),
-        "treasury_points": int(len(treas_curve)),
-        "ig_points": int(len(ig_curve)),
+        "week_ending_used": str(pd.to_datetime(current_date).date()),
+        "treasury_week_ending": str(pd.to_datetime(treas_w["date"].max()).date()),
+        "ig_week_ending": str(pd.to_datetime(ig_w["date"].max()).date()),
+        "treasury_points": int(len(c_t_now)),
+        "ig_points": int(len(c_ig_now)),
     })
+
