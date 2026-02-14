@@ -148,16 +148,18 @@ if st.session_state.tips_playing:
     st_autorefresh(interval=900, key="tips_autoplay")  # ms; slow it down if you want
     st.session_state.tips_idx = (st.session_state.tips_idx + 1) % N
 
-# Date slider (backed by index for stability)
+# Date slider (DISCRETE weekly dates; prevents snap-back)
 dates_py = [d.to_pydatetime() for d in dates_ts]
 
-selected_date = st.slider(
+selected_date = st.select_slider(
     "Week ending",
-    min_value=dates_py[0],
-    max_value=dates_py[-1],
+    options=dates_py,
     value=dates_py[st.session_state.tips_idx],
-    format="YYYY-MM-DD",
+    format_func=lambda d: d.strftime("%Y-%m-%d"),
+    disabled=st.session_state.tips_playing,
 )
+
+st.session_state.tips_idx = dates_py.index(selected_date)
 
 # Map selected date back to index safely
 # Find nearest match instead of exact index lookup
