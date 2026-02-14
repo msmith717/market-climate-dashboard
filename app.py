@@ -153,16 +153,19 @@ if st.session_state.tips_playing:
 # Date slider (DISCRETE weekly dates; prevents snap-back)
 dates_py = [d.to_pydatetime() for d in dates_ts]
 
+# Force the widget to display the current playback value while playing
+if st.session_state.tips_playing:
+    st.session_state["tips_week_ending"] = dates_py[st.session_state.tips_idx]
+
 selected_date = st.select_slider(
     "Week ending",
     options=dates_py,
-    value=dates_py[st.session_state.tips_idx],
     format_func=lambda d: d.strftime("%Y-%m-%d"),
     disabled=st.session_state.tips_playing,
     key="tips_week_ending",
 )
 
-if not st.session_state.tips_playing:     
+if not st.session_state.tips_playing:
     st.session_state.tips_idx = dates_py.index(selected_date)
 
 # Map selected date back to index safely
@@ -324,15 +327,20 @@ if st.session_state.nom_playing:
 
 # Discrete date slider (no snap-back)
 dates_py = [d.to_pydatetime() for d in dates_ts]
+
+# Force the widget to display the current playback value while playing
+if st.session_state.nom_playing:
+    st.session_state["nom_week_ending"] = dates_py[st.session_state.nom_idx]
+
 selected_date = st.select_slider(
     "Week ending",
     options=dates_py,
-    value=dates_py[st.session_state.nom_idx],
     format_func=lambda d: d.strftime("%Y-%m-%d"),
     disabled=st.session_state.nom_playing,
     key="nom_week_ending",
 )
-if not st.session_state.nom_playing:     
+
+if not st.session_state.nom_playing:
     st.session_state.nom_idx = dates_py.index(selected_date)
 
 sel_date = pd.to_datetime(dates_ts[st.session_state.nom_idx])
@@ -370,7 +378,7 @@ fig3.add_trace(go.Scatter(
     x=c_ig_sel["x_years"], y=c_ig_sel["y"],
     mode="lines",
     name="IG Selected",
-    line=dict(width=3, color="rgba(120,120,120,1.0)"),
+    line=dict(width=3, color="rgba(0,90,255,0.45)"),
 ))
 
 # NOW anchor (only when paused): Treasury black, IG blue
@@ -396,8 +404,8 @@ fig3.update_layout(
 )
 fig3.update_yaxes(range=y_range)
 
-st.plotly_chart(fig3, use_container_width=True)
 st.caption(f"Selected week ending: {sel_date.date()}  |  Now: {now_date.date()}")
+st.plotly_chart(fig3, use_container_width=True)
 
 # ---------------------------
 # Chart #4: Credit spread curve (IG - Treasury) — 12M / 6M / Now
