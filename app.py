@@ -159,6 +159,7 @@ selected_date = st.select_slider(
     value=dates_py[st.session_state.tips_idx],
     format_func=lambda d: d.strftime("%Y-%m-%d"),
     disabled=st.session_state.tips_playing,
+    key="tips_week_ending",
 )
 
 st.session_state.tips_idx = dates_py.index(selected_date)
@@ -328,6 +329,7 @@ selected_date = st.select_slider(
     value=dates_py[st.session_state.nom_idx],
     format_func=lambda d: d.strftime("%Y-%m-%d"),
     disabled=st.session_state.nom_playing,
+    key="nom_week_ending",
 )
 st.session_state.nom_idx = dates_py.index(selected_date)
 
