@@ -218,12 +218,12 @@ with st.expander("TIPS scrub status"):
     })
 
 # ---------------------------
-# Chart #3: Nominal Treasury vs IG Corporate curve (proxy) — 12M / 6M / Now
+# Chart #3: Nominal Treasury vs IG Corporate curve (proxy) — scrub-to-animate
 # ---------------------------
 import plotly.graph_objects as go
 
 st.divider()
-st.subheader("Nominal Treasury vs IG Corporate Curve (Proxy) — 12M / 6M / Now")
+st.subheader("Nominal Treasury vs IG Corporate Curve (Proxy) — Time Scrub (Weekly)")
 
 TREASURY_SERIES = {
     "1M": ("DGS1MO", 1/12),
@@ -251,97 +251,149 @@ IG_SERIES = {
 @st.cache_data(ttl=24 * 60 * 60)
 def fetch_curve_wide(series_def: dict) -> pd.DataFrame:
     frames = []
-    for label, (sid, x_years) in series_def.items():
+    for label, (sid, _) in series_def.items():
         d = fetch_fred_series(sid).rename(columns={"value": label})
         frames.append(d[["date", label]])
     wide = frames[0]
     for f in frames[1:]:
         wide = wide.merge(f, on="date", how="outer")
-    wide = wide.sort_values("date")
-    return wide
+    return wide.sort_values("date")
 
 def to_weekly_window(df: pd.DataFrame, years: int = 3) -> pd.DataFrame:
     end = df["date"].max()
     start = end - pd.DateOffset(years=years)
     w = df[df["date"] >= start].copy()
-    w = (
+    return (
         w.set_index("date")
          .resample("W-FRI")
          .last()
          .dropna()
          .reset_index()
     )
-    return w
-
-def nearest_row(df_weekly: pd.DataFrame, target_date: pd.Timestamp) -> pd.Series:
-    idx = (df_weekly["date"] - target_date).abs().idxmin()
-    return df_weekly.loc[idx]
 
 def row_to_curve(row: pd.Series, series_def: dict) -> pd.DataFrame:
     labels = list(series_def.keys())
     x = [series_def[k][1] for k in labels]
     y = [row.get(k, None) for k in labels]
-    c = pd.DataFrame({"x_years": x, "y": y}).dropna().sort_values("x_years")
-    return c
+    return pd.DataFrame({"x_years": x, "y": y}).dropna().sort_values("x_years")
 
-# Build weekly datasets
+# Build weekly datasets (3Y)
 treas_wide = fetch_curve_wide(TREASURY_SERIES)
 ig_wide = fetch_curve_wide(IG_SERIES)
 
 treas_w = to_weekly_window(treas_wide, years=3)
 ig_w = to_weekly_window(ig_wide, years=3)
 
-# Use latest common week-ending so lines align in time
-current_date = min(treas_w["date"].max(), ig_w["date"].max())
-date_6m = current_date - pd.DateOffset(months=6)
-date_12m = current_date - pd.DateOffset(months=12)
+# Intersect dates so the slider only offers weeks where BOTH curves exist
+common = pd.merge(
+    treas_w[["date"]],
+    ig_w[["date"]],
+    on="date",
+    how="inner"
+).sort_values("date").reset_index(drop=True)
 
-# Pick nearest available rows for each dataset
-treas_now = nearest_row(treas_w, current_date)
+dates_ts = common["date"].tolist()
+N = len(dates_ts)
+
+# Fixed y-axis scale from entire 3Y weekly dataset (both curves)
+treas_vals = treas_w[list(TREASURY_SERIES.keys())]
+ig_vals = ig_w[list(IG_SERIES.keys())]
+y_max = float(pd.concat([treas_vals, ig_vals], axis=1).max().max())
+pad = 0.10 * y_max if y_max > 0 else 0.5
+y_range = [0, y_max + pad]  # anchor bottom at 0
+
+# Playback state
+if "nom_playing" not in st.session_state:
+    st.session_state.nom_playing = False
+if "nom_idx" not in st.session_state:
+    st.session_state.nom_idx = N - 1  # default = now
+
+# Controls
+c1, c2, c3 = st.columns([1, 1, 3])
+with c1:
+    if st.button("Start", use_container_width=True, key="nom_start"):
+        st.session_state.nom_playing = True
+with c2:
+    if st.button("Stop", use_container_width=True, key="nom_stop"):
+        st.session_state.nom_playing = False
+with c3:
+    st.caption("Weekly playback. Use the slider to jump to a specific week.")
+
+# Autoplay tick
+if st.session_state.nom_playing:
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=900, key="nom_autoplay")  # ms; increase for calmer motion
+    st.session_state.nom_idx = (st.session_state.nom_idx + 1) % N
+
+# Discrete date slider (no snap-back)
+dates_py = [d.to_pydatetime() for d in dates_ts]
+selected_date = st.select_slider(
+    "Week ending",
+    options=dates_py,
+    value=dates_py[st.session_state.nom_idx],
+    format_func=lambda d: d.strftime("%Y-%m-%d"),
+    disabled=st.session_state.nom_playing,
+)
+st.session_state.nom_idx = dates_py.index(selected_date)
+
+sel_date = pd.to_datetime(dates_ts[st.session_state.nom_idx])
+
+# Pull matching rows for selected week and for "now"
+treas_sel = treas_w.loc[treas_w["date"] == sel_date].iloc[0]
+ig_sel = ig_w.loc[ig_w["date"] == sel_date].iloc[0]
+
+now_date = dates_ts[-1]
+treas_now = treas_w.loc[treas_w["date"] == now_date].iloc[0]
+ig_now = ig_w.loc[ig_w["date"] == now_date].iloc[0]
+
+# Also keep 6M / 12M rows for Chart #4 (spread)
+date_6m = pd.to_datetime(now_date) - pd.DateOffset(months=6)
+date_12m = pd.to_datetime(now_date) - pd.DateOffset(months=12)
+
+def nearest_row(df_weekly: pd.DataFrame, target_date: pd.Timestamp) -> pd.Series:
+    idx = (df_weekly["date"] - target_date).abs().idxmin()
+    return df_weekly.loc[idx]
+
 treas_6m = nearest_row(treas_w, date_6m)
 treas_12m = nearest_row(treas_w, date_12m)
-
-ig_now = nearest_row(ig_w, current_date)
 ig_6m = nearest_row(ig_w, date_6m)
 ig_12m = nearest_row(ig_w, date_12m)
 
 # Curves
 c_t_now = row_to_curve(treas_now, TREASURY_SERIES)
-c_t_6m  = row_to_curve(treas_6m, TREASURY_SERIES)
-c_t_12m = row_to_curve(treas_12m, TREASURY_SERIES)
-
 c_ig_now = row_to_curve(ig_now, IG_SERIES)
-c_ig_6m  = row_to_curve(ig_6m, IG_SERIES)
-c_ig_12m = row_to_curve(ig_12m, IG_SERIES)
+
+c_t_sel = row_to_curve(treas_sel, TREASURY_SERIES)
+c_ig_sel = row_to_curve(ig_sel, IG_SERIES)
 
 fig3 = go.Figure()
 
-# Treasury (solid, grayscale)
+# NOW (anchor): Treasury black, IG blue
 fig3.add_trace(go.Scatter(
-    x=c_t_12m["x_years"], y=c_t_12m["y"], mode="lines",
-    name="Treasury 12M", line=dict(width=3, color="rgba(0,0,0,0.15)")
+    x=c_t_now["x_years"], y=c_t_now["y"],
+    mode="lines",
+    name="Treasury Now",
+    line=dict(width=3, color="rgba(0,0,0,1.0)"),
 ))
 fig3.add_trace(go.Scatter(
-    x=c_t_6m["x_years"], y=c_t_6m["y"], mode="lines",
-    name="Treasury 6M", line=dict(width=3, color="rgba(0,0,0,0.35)")
-))
-fig3.add_trace(go.Scatter(
-    x=c_t_now["x_years"], y=c_t_now["y"], mode="lines",
-    name="Treasury Now", line=dict(width=3, color="rgba(0,0,0,1.0)")
+    x=c_ig_now["x_years"], y=c_ig_now["y"],
+    mode="lines",
+    name="IG Now",
+    line=dict(width=3, color="rgba(0,90,255,1.0)"),
 ))
 
-# IG (solid, blue)
+# Selected week: both gray (context)
 fig3.add_trace(go.Scatter(
-    x=c_ig_12m["x_years"], y=c_ig_12m["y"], mode="lines",
-    name="IG 12M", line=dict(width=3, color="rgba(0,90,255,0.15)")
+    x=c_t_sel["x_years"], y=c_t_sel["y"],
+    mode="lines",
+    name="Treasury Selected",
+    line=dict(width=3, color="rgba(120,120,120,1.0)"),
 ))
 fig3.add_trace(go.Scatter(
-    x=c_ig_6m["x_years"], y=c_ig_6m["y"], mode="lines",
-    name="IG 6M", line=dict(width=3, color="rgba(0,90,255,0.35)")
-))
-fig3.add_trace(go.Scatter(
-    x=c_ig_now["x_years"], y=c_ig_now["y"], mode="lines",
-    name="IG Now", line=dict(width=3, color="rgba(0,90,255,1.0)")
+    x=c_ig_sel["x_years"], y=c_ig_sel["y"],
+    mode="lines",
+    name="IG Selected",
+    line=dict(width=3, color="rgba(120,120,120,1.0)"),
 ))
 
 fig3.update_layout(
@@ -350,16 +402,11 @@ fig3.update_layout(
     margin=dict(l=10, r=10, t=10, b=10),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 )
+fig3.update_yaxes(range=y_range)
+
 st.plotly_chart(fig3, use_container_width=True)
 
-with st.expander("Nominal vs IG status"):
-    st.write({
-        "week_ending_used": str(pd.to_datetime(current_date).date()),
-        "treasury_week_ending": str(pd.to_datetime(treas_w["date"].max()).date()),
-        "ig_week_ending": str(pd.to_datetime(ig_w["date"].max()).date()),
-        "treasury_points": int(len(c_t_now)),
-        "ig_points": int(len(c_ig_now)),
-    })
+st.caption(f"Selected week ending: {sel_date.date()}  |  Now: {pd.to_datetime(now_date).date()}")
 
 # ---------------------------
 # Chart #4: Credit spread curve (IG - Treasury) — 12M / 6M / Now
