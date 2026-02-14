@@ -123,7 +123,9 @@ y_cols = maturities
 y_min = float(tips_w[y_cols].min().min())
 y_max = float(tips_w[y_cols].max().max())
 pad = 0.10 * (y_max - y_min) if y_max > y_min else 0.25
-y_range = [y_min - pad, y_max + pad]
+
+# Anchor bottom at zero
+y_range = [0, y_max + pad]
 
 # --- Playback state ---
 if "tips_playing" not in st.session_state:
