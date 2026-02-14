@@ -126,7 +126,7 @@ week_ending = tips_w["date"].max()
 
 fig2 = go.Figure()
 
-# Ghost curves with time-based opacity gradient
+# Ghost curves with grayscale + time-based opacity gradient
 total = len(ghost_rows)
 
 for i, (_, r) in enumerate(ghost_rows.iterrows()):
@@ -134,25 +134,24 @@ for i, (_, r) in enumerate(ghost_rows.iterrows()):
     if c.empty:
         continue
 
-    # Older curves more transparent, newer darker
-    opacity = 0.15 + 0.65 * (i / max(total - 1, 1))
+    opacity = 0.10 + 0.70 * (i / max(total - 1, 1))
 
     fig2.add_trace(go.Scatter(
         x=c["x"], y=c["y"],
         mode="lines",
-        line=dict(width=3),
+        line=dict(width=3, color="black"),
         opacity=opacity,
         showlegend=False,
         hoverinfo="skip",
     ))
 
-# Current curve (darkest, same width)
+# Current curve (darkest black)
 c_latest = row_to_curve(latest_row)
 fig2.add_trace(go.Scatter(
     x=c_latest["x"], y=c_latest["y"],
     mode="lines+markers",
     name="Current",
-    line=dict(width=3),
+    line=dict(width=3, color="black"),
     opacity=1.0,
 ))
 
