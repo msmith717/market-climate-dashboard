@@ -62,3 +62,72 @@ with st.expander("Status"):
     st.write({"series_id": series_id, "points": len(df), "last_date": str(df["date"].max().date())})
 
 # Optional: crude rotation placeholder (kept OFF for MVP stability)
+
+# ---------------------------
+# Chart #2: Real yield curve (TIPS) — latest weekly curve
+# ---------------------------
+st.divider()
+st.subheader("Real Yield Curve (TIPS) — Latest Week")
+
+TIPS_SERIES = {
+    "5Y": "DFII5",
+    "7Y": "DFII7",
+    "10Y": "DFII10",
+    "20Y": "DFII20",
+    "30Y": "DFII30",
+}
+
+@st.cache_data(ttl=24 * 60 * 60)
+def fetch_many(series_map: dict) -> pd.DataFrame:
+    frames = []
+    for label, sid in series_map.items():
+        d = fetch_fred_series(sid).rename(columns={"value": label})
+        frames.append(d[["date", label]])
+    out = frames[0]
+    for f in frames[1:]:
+        out = out.merge(f, on="date", how="outer")
+    out = out.sort_values("date")
+    return out
+
+tips = fetch_many(TIPS_SERIES)
+
+# 3-year window + weekly sampling (consistent with your philosophy)
+end2 = tips["date"].max()
+start2 = end2 - pd.DateOffset(years=3)
+tips = tips[tips["date"] >= start2].copy()
+
+tips_w = (
+    tips.set_index("date")
+        .resample("W-FRI")
+        .last()
+        .dropna()
+        .reset_index()
+)
+
+# Latest curve point set
+latest_row = tips_w.iloc[-1]
+curve = pd.DataFrame({
+    "Maturity": ["5Y", "7Y", "10Y", "20Y", "30Y"],
+    "Yield": [latest_row["5Y"], latest_row["7Y"], latest_row["10Y"], latest_row["20Y"], latest_row["30Y"]],
+})
+
+# Ensure maturity sorts correctly on x-axis
+curve["Maturity_Num"] = curve["Maturity"].str.replace("Y", "", regex=False).astype(float)
+curve = curve.sort_values("Maturity_Num")
+
+fig2 = px.line(curve, x="Maturity_Num", y="Yield", markers=True)
+fig2.update_layout(
+    xaxis_title="Maturity (Years)",
+    yaxis_title="Real Yield (%)",
+    margin=dict(l=10, r=10, t=10, b=10),
+)
+st.plotly_chart(fig2, use_container_width=True)
+
+with st.expander("TIPS curve status"):
+    st.write(
+        {
+            "latest_week_ending": str(tips_w["date"].max().date()),
+            "points_used": len(tips_w),
+            "series": TIPS_SERIES,
+        }
+    )
