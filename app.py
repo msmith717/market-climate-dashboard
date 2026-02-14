@@ -177,16 +177,6 @@ fig2.update_layout(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 )
 
-# Current curve (darkest black)
-c_latest = row_to_curve(latest_row)
-fig2.add_trace(go.Scatter(
-    x=c_latest["x"], y=c_latest["y"],
-    mode="lines+markers",
-    name="Current",
-    line=dict(width=3, color="black"),
-    opacity=1.0,
-))
-
 fig2.update_layout(
     xaxis_title="Maturity (Years)",
     yaxis_title="Real Yield (%)",
