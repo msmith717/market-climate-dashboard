@@ -38,7 +38,22 @@ def fetch_fred_series(series_id: str) -> pd.DataFrame:
 series_id = "RTWEXBGS"
 df = fetch_fred_series(series_id)
 
-st.subheader("Real Trade-Weighted U.S. Dollar Index (Broad) — RTWEXBGS")
+# --- Calm the series: 3-year window + weekly sampling ---
+end = df["date"].max()
+start = end - pd.DateOffset(years=3)
+df = df[df["date"] >= start].copy()
+
+# RTWEXBGS is monthly, but this keeps the pattern consistent across charts later.
+# "W-FRI" anchors weeks to Friday.
+df = (
+    df.set_index("date")
+      .resample("W-FRI")
+      .last()
+      .dropna()
+      .reset_index()
+)
+
+st.subheader("Real Trade-Weighted U.S. Dollar Index (Broad) — RTWEXBGS (Last 3Y, Weekly)")
 fig = px.line(df, x="date", y="value")
 fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
 st.plotly_chart(fig, use_container_width=True)
