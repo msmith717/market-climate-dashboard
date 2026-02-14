@@ -368,19 +368,20 @@ c_ig_sel = row_to_curve(ig_sel, IG_SERIES)
 
 fig3 = go.Figure()
 
-# NOW (anchor): Treasury black, IG blue
-fig3.add_trace(go.Scatter(
-    x=c_t_now["x_years"], y=c_t_now["y"],
-    mode="lines",
-    name="Treasury Now",
-    line=dict(width=3, color="rgba(0,0,0,1.0)"),
-))
-fig3.add_trace(go.Scatter(
-    x=c_ig_now["x_years"], y=c_ig_now["y"],
-    mode="lines",
-    name="IG Now",
-    line=dict(width=3, color="rgba(0,90,255,1.0)"),
-))
+# Show NOW anchor only when NOT playing
+if not st.session_state.nom_playing:
+    fig3.add_trace(go.Scatter(
+        x=c_t_now["x_years"], y=c_t_now["y"],
+        mode="lines",
+        name="Treasury Now",
+        line=dict(width=3, color="rgba(0,0,0,1.0)"),
+    ))
+    fig3.add_trace(go.Scatter(
+        x=c_ig_now["x_years"], y=c_ig_now["y"],
+        mode="lines",
+        name="IG Now",
+        line=dict(width=3, color="rgba(0,90,255,1.0)"),
+    ))
 
 # Selected week: both gray (context)
 fig3.add_trace(go.Scatter(
