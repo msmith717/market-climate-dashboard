@@ -221,7 +221,7 @@ IG_SERIES = {
     "5-7Y": ("BAMLC3A0C57YEY", 6.0),
     "7-10Y": ("BAMLC4A0C710YEY", 8.5),
     "10-15Y": ("BAMLC7A0C1015YEY", 12.5),
-    "15+Y": ("BAMLC8A0C15PYEY", 17.5),
+    "15+Y": ("BAMLC8A0C15PYEY", 20.0),
 }
 
 @st.cache_data(ttl=24 * 60 * 60)
