@@ -148,14 +148,25 @@ if st.session_state.tips_playing:
     st_autorefresh(interval=900, key="tips_autoplay")  # ms; slow it down if you want
     st.session_state.tips_idx = (st.session_state.tips_idx + 1) % N
 
-# Slider as an INTEGER index (this will move with playback)
-st.session_state.tips_idx = st.slider(
-    "Week (index)",
-    min_value=0,
-    max_value=N - 1,
-    value=int(st.session_state.tips_idx),
-    step=1,
+# Date slider (backed by index for stability)
+dates_py = [d.to_pydatetime() for d in dates_ts]
+
+selected_date = st.slider(
+    "Week ending",
+    min_value=dates_py[0],
+    max_value=dates_py[-1],
+    value=dates_py[st.session_state.tips_idx],
+    format="YYYY-MM-DD",
 )
+
+# Map selected date back to index safely
+# Find nearest match instead of exact index lookup
+closest_idx = min(
+    range(N),
+    key=lambda i: abs(dates_py[i] - selected_date)
+)
+
+st.session_state.tips_idx = closest_idx
 
 sel_date = dates_ts[st.session_state.tips_idx]
 st.caption(f"Selected week ending: {sel_date.date()}  |  Now: {dates_ts[-1].date()}")
