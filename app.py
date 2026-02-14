@@ -337,3 +337,47 @@ with st.expander("Nominal vs IG status"):
         "ig_points": int(len(c_ig_now)),
     })
 
+# ---------------------------
+# Chart #4: Credit spread curve (IG - Treasury) — 12M / 6M / Now
+# ---------------------------
+st.divider()
+st.subheader("Credit Spread Curve (IG − Treasury) — 12M / 6M / Now")
+
+# Match IG buckets to nearest Treasury point-maturities
+SPREAD_MATCH = [
+    ("1-3Y",  "2Y"),
+    ("3-5Y",  "5Y"),
+    ("5-7Y",  "7Y"),
+    ("7-10Y", "10Y"),
+    ("10-15Y","20Y"),
+    ("15+Y",  "20Y"),
+]
+
+def spread_curve(ig_row: pd.Series, t_row: pd.Series) -> pd.DataFrame:
+    rows = []
+    for ig_label, t_label in SPREAD_MATCH:
+        ig_y = ig_row.get(ig_label, None)
+        t_y = t_row.get(t_label, None)
+        x = IG_SERIES[ig_label][1]  # x-year anchor from IG buckets
+        if ig_y is None or t_y is None:
+            continue
+        rows.append({"x_years": x, "spread": float(ig_y) - float(t_y)})
+    out = pd.DataFrame(rows).dropna().sort_values("x_years")
+    return out
+
+s_now = spread_curve(ig_now, treas_now)
+s_6m  = spread_curve(ig_6m, treas_6m)
+s_12m = spread_curve(ig_12m, treas_12m)
+
+fig4 = go.Figure()
+
+fig4.add_trace(go.Scatter(
+    x=s_12m["x_years"], y=s_12m["spread"], mode="lines",
+    name="Spread 12M", line=dict(width=3, color="rgba(0,0,0,0.15)")
+))
+fig4.add_trace(go.Scatter(
+    x=s_6m["x_years"], y=s_6m["spread"], mode="lines",
+    name="Spread 6M", line=dict(width=3, color="rgba(0,0,0,0.35)")
+))
+fig4.add_trace(go.Scatter(
+    x=s_now["x_years"], y=s_now["spread"], mode="lines",
