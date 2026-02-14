@@ -64,10 +64,12 @@ with st.expander("Status"):
 # Optional: crude rotation placeholder (kept OFF for MVP stability)
 
 # ---------------------------
-# Chart #2: Real yield curve (TIPS) — latest weekly curve
+# Chart #2: Real yield curve (TIPS) — latest weekly curve + ghost curves
 # ---------------------------
+import plotly.graph_objects as go
+
 st.divider()
-st.subheader("Real Yield Curve (TIPS) — Latest Week")
+st.subheader("Real Yield Curve (TIPS) — Latest Week + Ghost Curves")
 
 TIPS_SERIES = {
     "5Y": "DFII5",
@@ -104,33 +106,65 @@ tips_w = (
         .reset_index()
 )
 
-# Latest curve point set
+maturities = ["5Y", "7Y", "10Y", "20Y", "30Y"]
+maturity_num = [5.0, 7.0, 10.0, 20.0, 30.0]
+
+def row_to_curve(row: pd.Series) -> pd.DataFrame:
+    c = pd.DataFrame({"x": maturity_num, "y": [row[m] for m in maturities]})
+    return c.dropna()
+
+# Build ghost dates: one curve per month (use the last weekly point in each month)
+tips_w["month"] = tips_w["date"].dt.to_period("M").astype(str)
+ghost_rows = tips_w.groupby("month", as_index=False).tail(1)
+
+# Keep ghost curves to a manageable count (last 12 months by default)
+GHOST_MONTHS = 12
+ghost_rows = ghost_rows.tail(GHOST_MONTHS)
+
 latest_row = tips_w.iloc[-1]
-curve = pd.DataFrame({
-    "Maturity": ["5Y", "7Y", "10Y", "20Y", "30Y"],
-    "Yield": [latest_row["5Y"], latest_row["7Y"], latest_row["10Y"], latest_row["20Y"], latest_row["30Y"]],
-})
+week_ending = tips_w["date"].max()
 
-# Ensure maturity sorts correctly on x-axis
-curve["Maturity_Num"] = curve["Maturity"].str.replace("Y", "", regex=False).astype(float)
-curve = curve.sort_values("Maturity_Num")
+fig2 = go.Figure()
 
-fig2 = px.line(curve, x="Maturity_Num", y="Yield", markers=True)
+# Ghost curves first (faint)
+for _, r in ghost_rows.iterrows():
+    c = row_to_curve(r)
+    if c.empty:
+        continue
+    fig2.add_trace(go.Scatter(
+        x=c["x"], y=c["y"],
+        mode="lines",
+        line=dict(width=1),
+        opacity=0.20,
+        showlegend=False,
+        hoverinfo="skip",
+    ))
+
+# Current curve (bold)
+c_latest = row_to_curve(latest_row)
+fig2.add_trace(go.Scatter(
+    x=c_latest["x"], y=c_latest["y"],
+    mode="lines+markers",
+    name="Current",
+    line=dict(width=4),
+))
+
 fig2.update_layout(
     xaxis_title="Maturity (Years)",
     yaxis_title="Real Yield (%)",
     margin=dict(l=10, r=10, t=10, b=10),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 )
 st.plotly_chart(fig2, use_container_width=True)
 
-with st.expander("TIPS curve status"):
-    st.write(
-        {
-            "latest_week_ending": str(tips_w["date"].max().date()),
-            "points_used": len(tips_w),
-            "series": TIPS_SERIES,
-        }
-    )
+with st.expander("TIPS ghost status"):
+    st.write({
+        "week_ending": str(pd.to_datetime(week_ending).date()),
+        "ghost_months_plotted": int(len(ghost_rows)),
+        "ghost_months_setting": GHOST_MONTHS,
+        "series": TIPS_SERIES,
+    })
+
 # ---------------------------
 # Chart #3: Nominal Treasury vs Investment-Grade (IG) curve proxy — latest weekly
 # ---------------------------
