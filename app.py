@@ -67,6 +67,7 @@ with st.expander("Status"):
 # Chart #2: Real yield curve (TIPS) — scrub-to-animate (time slider)
 # ---------------------------
 import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
 
 st.divider()
 st.subheader("Real Yield Curve (TIPS) — Time Scrub (Weekly)")
@@ -115,19 +116,44 @@ def row_to_curve(row: pd.Series) -> pd.DataFrame:
 
 # Slider over available weekly dates
 dates = tips_w["date"].dt.to_pydatetime().tolist()
-default_idx = len(dates) - 1
 
+# --- Playback state ---
+if "tips_playing" not in st.session_state:
+    st.session_state.tips_playing = False
+if "tips_idx" not in st.session_state:
+    st.session_state.tips_idx = len(dates) - 1  # default = now
+
+# Controls
+c1, c2, c3 = st.columns([1, 1, 2])
+with c1:
+    if st.button("Start", use_container_width=True):
+        st.session_state.tips_playing = True
+with c2:
+    if st.button("Stop", use_container_width=True):
+        st.session_state.tips_playing = False
+with c3:
+    st.caption("Scrub with the slider, or press Start to play (weekly).")
+
+# If playing, auto-advance and trigger reruns
+if st.session_state.tips_playing:
+    st_autorefresh(interval=900, key="tips_autoplay")  # ms; adjust slower/faster
+    st.session_state.tips_idx = (st.session_state.tips_idx + 1) % len(dates)
+
+# Slider reflects current index (and can override it when not playing)
 selected_date = st.slider(
     "Week ending",
     min_value=dates[0],
     max_value=dates[-1],
-    value=dates[default_idx],
+    value=dates[st.session_state.tips_idx],
     format="YYYY-MM-DD",
+    key="tips_slider",
 )
 
-# Pick nearest row (slider date should match exactly, but this is robust)
-idx = (tips_w["date"] - pd.to_datetime(selected_date)).abs().idxmin()
-row_sel = tips_w.loc[idx]
+# When not playing, set index from slider choice
+if not st.session_state.tips_playing:
+    st.session_state.tips_idx = dates.index(selected_date)
+
+row_sel = tips_w.iloc[st.session_state.tips_idx]
 row_now = tips_w.iloc[-1]
 
 c_sel = row_to_curve(row_sel)
@@ -135,21 +161,20 @@ c_now = row_to_curve(row_now)
 
 fig2 = go.Figure()
 
-# Optional anchor: show "Now" faintly so the selected curve has context
+# NOW = black (dominant)
 fig2.add_trace(go.Scatter(
     x=c_now["x"], y=c_now["y"],
     mode="lines",
-    name="Now (anchor)",
-    line=dict(width=3, color="rgba(0,0,0,0.20)"),
-    hoverinfo="skip",
+    name="Now",
+    line=dict(width=3, color="rgba(0,0,0,1.0)"),
 ))
 
-# Selected curve (dark)
+# Selected week = gray (context)
 fig2.add_trace(go.Scatter(
     x=c_sel["x"], y=c_sel["y"],
     mode="lines+markers",
     name="Selected week",
-    line=dict(width=3, color="rgba(0,0,0,1.0)"),
+    line=dict(width=3, color="rgba(120,120,120,1.0)"),
 ))
 
 fig2.update_layout(
