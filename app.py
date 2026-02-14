@@ -343,7 +343,6 @@ with st.expander("Nominal vs IG status"):
 st.divider()
 st.subheader("Credit Spread Curve (IG − Treasury) — 12M / 6M / Now")
 
-# Match IG buckets to nearest Treasury point-maturities
 SPREAD_MATCH = [
     ("1-3Y",  "2Y"),
     ("3-5Y",  "5Y"),
@@ -353,17 +352,19 @@ SPREAD_MATCH = [
     ("15+Y",  "20Y"),
 ]
 
-def spread_curve(ig_row: pd.Series, t_row: pd.Series) -> pd.DataFrame:
+def spread_curve(ig_row, t_row):
     rows = []
     for ig_label, t_label in SPREAD_MATCH:
-        ig_y = ig_row.get(ig_label, None)
-        t_y = t_row.get(t_label, None)
-        x = IG_SERIES[ig_label][1]  # x-year anchor from IG buckets
+        ig_y = ig_row.get(ig_label)
+        t_y = t_row.get(t_label)
         if ig_y is None or t_y is None:
             continue
-        rows.append({"x_years": x, "spread": float(ig_y) - float(t_y)})
-    out = pd.DataFrame(rows).dropna().sort_values("x_years")
-    return out
+        rows.append({
+            "x_years": IG_SERIES[ig_label][1],
+            "spread": float(ig_y) - float(t_y)
+        })
+    df = pd.DataFrame(rows)
+    return df.sort_values("x_years")
 
 s_now = spread_curve(ig_now, treas_now)
 s_6m  = spread_curve(ig_6m, treas_6m)
@@ -372,12 +373,40 @@ s_12m = spread_curve(ig_12m, treas_12m)
 fig4 = go.Figure()
 
 fig4.add_trace(go.Scatter(
-    x=s_12m["x_years"], y=s_12m["spread"], mode="lines",
-    name="Spread 12M", line=dict(width=3, color="rgba(0,0,0,0.15)")
+    x=s_12m["x_years"],
+    y=s_12m["spread"],
+    mode="lines",
+    name="Spread 12M",
+    line=dict(width=3, color="rgba(0,0,0,0.15)")
 ))
+
 fig4.add_trace(go.Scatter(
-    x=s_6m["x_years"], y=s_6m["spread"], mode="lines",
-    name="Spread 6M", line=dict(width=3, color="rgba(0,0,0,0.35)")
+    x=s_6m["x_years"],
+    y=s_6m["spread"],
+    mode="lines",
+    name="Spread 6M",
+    line=dict(width=3, color="rgba(0,0,0,0.35)")
 ))
+
 fig4.add_trace(go.Scatter(
-    x=s_now["x_years"], y=s_now["spread"], mode="lines",
+    x=s_now["x_years"],
+    y=s_now["spread"],
+    mode="lines",
+    name="Spread Now",
+    line=dict(width=3, color="rgba(0,0,0,1.0)")
+))
+
+fig4.update_layout(
+    xaxis_title="Maturity (Years)",
+    yaxis_title="Spread (percentage points)",
+    margin=dict(l=10, r=10, t=10, b=10),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0)
+)
+
+st.plotly_chart(fig4, use_container_width=True)
+
+with st.expander("Spread curve status"):
+    st.write({
+        "week_ending_used": str(pd.to_datetime(current_date).date()),
+        "points_now": int(len(s_now))
+    })
