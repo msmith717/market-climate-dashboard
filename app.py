@@ -114,17 +114,25 @@ def row_to_curve(row: pd.Series) -> pd.DataFrame:
     c = pd.DataFrame({"x": x_years, "y": [row[m] for m in maturities]})
     return c.dropna()
 
-# Slider over available weekly dates
-dates = tips_w["date"].dt.to_pydatetime().tolist()
+# --- Build a stable index for playback ---
+dates_ts = tips_w["date"].tolist()  # pandas Timestamps, length N
+N = len(dates_ts)
+
+# --- Fixed y-axis scale from the whole dataset (3Y weekly window) ---
+y_cols = maturities
+y_min = float(tips_w[y_cols].min().min())
+y_max = float(tips_w[y_cols].max().max())
+pad = 0.10 * (y_max - y_min) if y_max > y_min else 0.25
+y_range = [y_min - pad, y_max + pad]
 
 # --- Playback state ---
 if "tips_playing" not in st.session_state:
     st.session_state.tips_playing = False
 if "tips_idx" not in st.session_state:
-    st.session_state.tips_idx = len(dates) - 1  # default = now
+    st.session_state.tips_idx = N - 1  # default = now
 
-# Controls
-c1, c2, c3 = st.columns([1, 1, 2])
+# --- Controls ---
+c1, c2, c3 = st.columns([1, 1, 3])
 with c1:
     if st.button("Start", use_container_width=True):
         st.session_state.tips_playing = True
@@ -132,26 +140,25 @@ with c2:
     if st.button("Stop", use_container_width=True):
         st.session_state.tips_playing = False
 with c3:
-    st.caption("Scrub with the slider, or press Start to play (weekly).")
+    st.caption("Weekly playback. Use slider to jump to a specific week.")
 
-# If playing, auto-advance and trigger reruns
+# Autoplay tick
 if st.session_state.tips_playing:
-    st_autorefresh(interval=900, key="tips_autoplay")  # ms; adjust slower/faster
-    st.session_state.tips_idx = (st.session_state.tips_idx + 1) % len(dates)
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=900, key="tips_autoplay")  # ms; slow it down if you want
+    st.session_state.tips_idx = (st.session_state.tips_idx + 1) % N
 
-# Slider reflects current index (and can override it when not playing)
-selected_date = st.slider(
-    "Week ending",
-    min_value=dates[0],
-    max_value=dates[-1],
-    value=dates[st.session_state.tips_idx],
-    format="YYYY-MM-DD",
-    key="tips_slider",
+# Slider as an INTEGER index (this will move with playback)
+st.session_state.tips_idx = st.slider(
+    "Week (index)",
+    min_value=0,
+    max_value=N - 1,
+    value=int(st.session_state.tips_idx),
+    step=1,
 )
 
-# When not playing, set index from slider choice
-if not st.session_state.tips_playing:
-    st.session_state.tips_idx = dates.index(selected_date)
+sel_date = dates_ts[st.session_state.tips_idx]
+st.caption(f"Selected week ending: {sel_date.date()}  |  Now: {dates_ts[-1].date()}")
 
 row_sel = tips_w.iloc[st.session_state.tips_idx]
 row_now = tips_w.iloc[-1]
@@ -169,7 +176,7 @@ fig2.add_trace(go.Scatter(
     line=dict(width=3, color="rgba(0,0,0,1.0)"),
 ))
 
-# Selected week = gray (context)
+# Selected week = gray
 fig2.add_trace(go.Scatter(
     x=c_sel["x"], y=c_sel["y"],
     mode="lines+markers",
@@ -183,6 +190,8 @@ fig2.update_layout(
     margin=dict(l=10, r=10, t=10, b=10),
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
 )
+fig2.update_yaxes(range=y_range)
+
 st.plotly_chart(fig2, use_container_width=True)
 
 with st.expander("TIPS scrub status"):
