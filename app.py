@@ -162,7 +162,8 @@ selected_date = st.select_slider(
     key="tips_week_ending",
 )
 
-st.session_state.tips_idx = dates_py.index(selected_date)
+if not st.session_state.tips_playing:     
+    st.session_state.tips_idx = dates_py.index(selected_date)
 
 # Map selected date back to index safely
 # Find nearest match instead of exact index lookup
@@ -331,7 +332,8 @@ selected_date = st.select_slider(
     disabled=st.session_state.nom_playing,
     key="nom_week_ending",
 )
-st.session_state.nom_idx = dates_py.index(selected_date)
+if not st.session_state.nom_playing:     
+    st.session_state.nom_idx = dates_py.index(selected_date)
 
 sel_date = pd.to_datetime(dates_ts[st.session_state.nom_idx])
 now_date = pd.to_datetime(dates_ts[-1])
@@ -467,6 +469,6 @@ st.plotly_chart(fig4, use_container_width=True)
 
 with st.expander("Spread curve status"):
     st.write({
-        "week_ending_used": str(pd.to_datetime(current_date).date()),
+        "week_ending_used": str(pd.to_datetime(now_date).date()),
         "points_now": int(len(s_now))
     })
