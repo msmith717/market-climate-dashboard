@@ -292,21 +292,33 @@ c_ig_12m = row_to_curve(ig_12m, IG_SERIES)
 
 fig3 = go.Figure()
 
-# Treasury (solid)
-fig3.add_trace(go.Scatter(x=c_t_12m["x_years"], y=c_t_12m["y"], mode="lines",
-                          name="Treasury 12M", line=dict(width=3, color="lightgray")))
-fig3.add_trace(go.Scatter(x=c_t_6m["x_years"], y=c_t_6m["y"], mode="lines",
-                          name="Treasury 6M", line=dict(width=3, color="gray")))
-fig3.add_trace(go.Scatter(x=c_t_now["x_years"], y=c_t_now["y"], mode="lines",
-                          name="Treasury Now", line=dict(width=3, color="black")))
+# Treasury (solid, grayscale)
+fig3.add_trace(go.Scatter(
+    x=c_t_12m["x_years"], y=c_t_12m["y"], mode="lines",
+    name="Treasury 12M", line=dict(width=3, color="rgba(0,0,0,0.15)")
+))
+fig3.add_trace(go.Scatter(
+    x=c_t_6m["x_years"], y=c_t_6m["y"], mode="lines",
+    name="Treasury 6M", line=dict(width=3, color="rgba(0,0,0,0.35)")
+))
+fig3.add_trace(go.Scatter(
+    x=c_t_now["x_years"], y=c_t_now["y"], mode="lines",
+    name="Treasury Now", line=dict(width=3, color="rgba(0,0,0,1.0)")
+))
 
-# IG (dashed)
-fig3.add_trace(go.Scatter(x=c_ig_12m["x_years"], y=c_ig_12m["y"], mode="lines",
-                          name="IG 12M", line=dict(width=3, color="lightgray", dash="dash")))
-fig3.add_trace(go.Scatter(x=c_ig_6m["x_years"], y=c_ig_6m["y"], mode="lines",
-                          name="IG 6M", line=dict(width=3, color="gray", dash="dash")))
-fig3.add_trace(go.Scatter(x=c_ig_now["x_years"], y=c_ig_now["y"], mode="lines",
-                          name="IG Now", line=dict(width=3, color="black", dash="dash")))
+# IG (solid, blue)
+fig3.add_trace(go.Scatter(
+    x=c_ig_12m["x_years"], y=c_ig_12m["y"], mode="lines",
+    name="IG 12M", line=dict(width=3, color="rgba(0,90,255,0.15)")
+))
+fig3.add_trace(go.Scatter(
+    x=c_ig_6m["x_years"], y=c_ig_6m["y"], mode="lines",
+    name="IG 6M", line=dict(width=3, color="rgba(0,90,255,0.35)")
+))
+fig3.add_trace(go.Scatter(
+    x=c_ig_now["x_years"], y=c_ig_now["y"], mode="lines",
+    name="IG Now", line=dict(width=3, color="rgba(0,90,255,1.0)")
+))
 
 fig3.update_layout(
     xaxis_title="Maturity (Years)",
